@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>火星行程管家</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI2ZmNTcyMiIgc3Ryb2tlPSIjYmYzNjBjIiBzdHJva2Utd2lkdGg9IjIiLz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI0MCIgcng9IjEwIiByeT0iNyIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PGVsbGlwc2UgY3g9IjcwIiBjeT0iNjAiIHJ4PSI4IiByeT0iNSIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PHBhdGggZD0iTSAxNSA2NSBRIDQwIDgwIDg1IDU1IiBzdHJva2U9IiNiZjM2MGMiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iMC44Ii8+PC9zdmc+">
+
+    <style>
+        :root { --mars-red: #bf360c; --mars-orange: #ff5722; --voice-blue: #03a9f4; --edit-orange: #fb8c00; }
+        
+        /* 導引標記：全面改為向左對齊 */
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: #fdfdfd; padding: 20px; line-height: 1.6; color: #333; text-align: left; }
+        .container { max-width: 600px; margin: 0 auto; }
+        
+        h1 { font-size: 2.8rem; color: var(--mars-red); display: flex; align-items: center; gap: 10px; margin-bottom: 25px; }
+        .header-icon { width: 50px; height: 50px; }
+
+        .card { background: white; padding: 25px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #eee; margin-bottom: 25px; }
+        label { font-size: 1.5rem; font-weight: bold; color: var(--mars-red); display: block; margin-bottom: 8px; }
+        
+        input { width: 100%; padding: 18px; font-size: 1.8rem; margin-bottom: 20px; border-radius: 15px; border: 3px solid #ccc; box-sizing: border-box; background: #fafafa; }
+        input:focus { border-color: var(--mars-orange); outline: none; background: white; }
+
+        /* 導引標記：錄音按鈕的動態效果 */
+        .btn { width: 100%; padding: 20px; font-size: 2rem; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 15px; display: block; }
+        
+        .btn-voice { background: var(--voice-blue); color: white; transition: all 0.3s; }
+        /* 正在錄音時的樣式：變紅、放大、呼吸燈效果 */
+        .btn-voice.recording { background: #f44336; animation: pulse 1.2s infinite; transform: scale(1.02); }
+        .btn-voice.recording::after { content: " (正在聽...)"; }
+
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(244, 67, 54, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); } }
+
+        .btn-save { background: var(--mars-red); color: white; }
+        .btn-update { background: var(--edit-orange); color: white; }
+
+        /* 行程清單 */
+        .item { background: white; padding: 20px; margin-top: 15px; border-radius: 20px; display: flex; flex-direction: column; border-left: 15px solid var(--mars-red); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .item-info b { font-size: 2.2rem; display: block; color: #000; margin-bottom: 5px; }
+        .item-info span { font-size: 1.3rem; color: #666; display: block; margin-bottom: 15px; }
+        
+        .item-actions { display: flex; gap: 10px; }
+        .btn-action { padding: 10px 20px; border-radius: 12px; border: 1px solid #ccc; font-size: 1.2rem; cursor: pointer; font-weight: bold; }
+        .btn-edit { background: #fff3e0; color: #ef6c00; border-color: #ffcc80; }
+        .btn-del { background: #ffebee; color: #d32f2f; border-color: #ffcdd2; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>
+        <svg class="header-icon" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#ff5722" stroke="#bf360c" stroke-width="2"/><ellipse cx="30" cy="40" rx="10" ry="7" fill="#bf360c" opacity="0.7"/><ellipse cx="70" cy="60" rx="8" ry="5" fill="#bf360c" opacity="0.7"/><path d="M 15 65 Q 40 80 85 55" stroke="#bf360c" stroke-width="3" fill="none" opacity="0.8"/></svg>
+        <span>火星行程管家</span>
+    </h1>
+    
+    <div class="card">
+        <label>行程：</label>
+        <input type="text" id="tName" placeholder="點這裡輸入內容">
+        
+        <label>日期與時間：</label>
+        <input type="datetime-local" id="tTime">
+        
+        <button class="btn btn-voice" id="voiceBtn" onclick="startVoice()">🎤 用說的也可以</button>
+        <button class="btn btn-save" id="saveBtn" onclick="saveTask()">💾 記下來</button>
+        <button id="cancelEdit" style="display:none; width:100%; background:none; border:none; color:grey; text-decoration:underline; cursor:pointer;" onclick="cancelEdit()">取消修改</button>
+    </div>
+
+    <div id="taskList"></div>
+</div>
+
+<script>
+    let editingId = null; // 追蹤目前正在編輯的 ID
+
+    window.onload = () => {
+        if ("Notification" in window) Notification.requestPermission();
+        setDefaultTime();
+        render();
+        setInterval(checkReminders, 10000);
+    };
+
+    function setDefaultTime() {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('tTime').value = now.toISOString().slice(0, 16);
+    }
+
+    function saveTask() {
+        const name = document.getElementById('tName').value;
+        const time = document.getElementById('tTime').value;
+
+        if (!name) { alert("請填寫行程內容喔！"); return; }
+        
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+
+        if (editingId) {
+            // 編輯模式：更新舊資料
+            tasks = tasks.map(t => t.id === editingId ? { ...t, name, time, done: false } : t);
+            editingId = null;
+            resetUI();
+        } else {
+            // 新增模式
+            tasks.push({ id: Date.now(), name, time, done: false });
+        }
+
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+        document.getElementById('tName').value = "";
+        setDefaultTime();
+        render();
+        alert("記好了！時間到會大聲提醒您。");
+    }
+
+    function render() {
+        const listDiv = document.getElementById('taskList');
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        listDiv.innerHTML = tasks.sort((a,b)=>new Date(a.time)-new Date(b.time)).map(t => `
+            <div class="item">
+                <div class="item-info">
+                    <b>${t.name}</b>
+                    <span>⏰ ${t.time.replace('T', ' ')}</span>
+                </div>
+                <div class="item-actions">
+                    <button class="btn-action btn-edit" onclick="editTask(${t.id})">✏️ 改一下</button>
+                    <button class="btn-action btn-del" onclick="deleteTask(${t.id})">❌ 刪除</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // 導引標記：編輯功能邏輯
+    function editTask(id) {
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        const task = tasks.find(t => t.id === id);
+        if (task) {
+            document.getElementById('tName').value = task.name;
+            document.getElementById('tTime').value = task.time;
+            editingId = id;
+            
+            // 變更 UI 狀態
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.innerText = "🆙 更新我的行程";
+            saveBtn.className = "btn btn-update";
+            document.getElementById('cancelEdit').style.display = "block";
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // 回到頂端方便修改
+        }
+    }
+
+    function cancelEdit() {
+        editingId = null;
+        document.getElementById('tName').value = "";
+        setDefaultTime();
+        resetUI();
+    }
+
+    function resetUI() {
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.innerText = "💾 記下來";
+        saveBtn.className = "btn btn-save";
+        document.getElementById('cancelEdit').style.display = "none";
+    }
+
+    function deleteTask(id) {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks.filter(t=>t.id!==id)));
+        render();
+    }
+
+    function checkReminders() {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        const now = new Date();
+        let updated = false;
+
+        tasks.forEach(t => {
+            if (new Date(t.time) <= now && !t.done) {
+                fireReminder(t.name);
+                t.done = true;
+                updated = true;
+            }
+        });
+        if (updated) {
+            localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+            render();
+        }
+    }
+
+    function fireReminder(name) {
+        if (Notification.permission === "granted") new Notification("⏰ 時間到！", { body: name });
+        const utter = new SpeechSynthesisUtterance("時間到囉，記得去做 " + name);
+        utter.lang = 'zh-TW';
+        window.speechSynthesis.speak(utter);
+        if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+        alert("⏰ 提醒時間到！\n內容：" + name);
+    }
+
+    // 導引標記：語音按鈕視覺變化邏輯
+    function startVoice() {
+        const btn = document.getElementById('voiceBtn');
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'zh-TW';
+
+        recognition.onstart = () => {
+            btn.classList.add('recording'); // 啟動視覺特效
+        };
+
+        recognition.onresult = (e) => {
+            document.getElementById('tName').value = e.results[0][0].transcript;
+        };
+
+        recognition.onend = () => {
+            btn.classList.remove('recording'); // 關閉視覺特效
+        };
+
+        recognition.onerror = () => {
+            btn.classList.remove('recording');
+            alert("哎呀，沒聽清楚，請確認有沒有開麥克風。");
+        };
+
+        recognition.start();
+    }
+</script>
+</body>
+</html>
