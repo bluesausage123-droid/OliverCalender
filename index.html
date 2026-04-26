@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>火星行程管家</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI2ZmNTcyMiIgc3Ryb2tlPSIjYmYzNjBjIiBzdHJva2Utd2lkdGg9IjIiLz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI0MCIgcng9IjEwIiByeT0iNyIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PGVsbGlwc2UgY3g9IjcwIiBjeT0iNjAiIHJ4PSI4IiByeT0iNSIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PHBhdGggZD0iTSAxNSA2NSBRIDQwIDgwIDg1IDU1IiBzdHJva2U9IiNiZjM2MGMiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iMC44Ii8+PC9zdmc+">
+
+    <style>
+        :root { --mars-red: #bf360c; --mars-orange: #ff5722; }
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: #fdfdfd; padding: 20px; text-align: center; }
+        .container { max-width: 600px; margin: auto; }
+        
+        /* 導引標記：標題區域的火星大圖案設計 */
+        h1 { font-size: 2.5rem; color: var(--mars-red); display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .header-icon { width: 50px; height: 50px; }
+
+        .card { background: white; padding: 25px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 2px solid #eee; text-align: left; margin-bottom: 25px; }
+        label { font-size: 1.4rem; font-weight: bold; color: var(--mars-red); }
+        input { width: 100%; padding: 15px; font-size: 1.6rem; margin: 10px 0 20px 0; border-radius: 12px; border: 3px solid #ccc; box-sizing: border-box; }
+        
+        .btn { width: 100%; padding: 20px; font-size: 1.8rem; border-radius: 15px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        .btn-save { background: var(--mars-red); color: white; }
+        .btn-voice { background: #03a9f4; color: white; }
+
+        .item { background: white; padding: 15px; margin-top: 10px; border-radius: 15px; display: flex; justify-content: space-between; align-items: center; border-left: 15px solid var(--mars-red); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .item-info b { font-size: 1.8rem; display: block; }
+        .item-info span { font-size: 1.2rem; color: #666; }
+        .btn-del { background: #fee; color: #d32f2f; width: auto; padding: 8px 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #d32f2f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>
+        <svg class="header-icon" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#ff5722" stroke="#bf360c" stroke-width="2"/><ellipse cx="30" cy="40" rx="10" ry="7" fill="#bf360c" opacity="0.7"/><ellipse cx="70" cy="60" rx="8" ry="5" fill="#bf360c" opacity="0.7"/><path d="M 15 65 Q 40 80 85 55" stroke="#bf360c" stroke-width="3" fill="none" opacity="0.8"/></svg>
+        <span>火星行程管家</span>
+    </h1>
+    
+    <div class="card">
+        <label>行程內容：</label>
+        <input type="text" id="tName" placeholder="例如：去醫院、找老張">
+        <label>提醒時間：</label>
+        <input type="datetime-local" id="tTime">
+        <button class="btn btn-voice" onclick="startVoice()">🎤 用說的也可以</button>
+        <button class="btn btn-save" onclick="saveTask()">💾 記下來</button>
+    </div>
+
+    <div id="taskList"></div>
+</div>
+
+<script>
+    // 程式碼邏輯保持不變 (包含語音辨識、本地儲存與提醒功能)
+    window.onload = () => {
+        if ("Notification" in window) Notification.requestPermission();
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('tTime').value = now.toISOString().slice(0, 16);
+        render();
+        setInterval(checkReminders, 10000);
+    };
+
+    function saveTask() {
+        const name = document.getElementById('tName').value;
+        const time = document.getElementById('tTime').value;
+        if (!name) return alert("請輸入內容");
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        tasks.push({ id: Date.now(), name, time, done: false });
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+        document.getElementById('tName').value = "";
+        render();
+        alert("記好了！");
+    }
+
+    function render() {
+        const listDiv = document.getElementById('taskList');
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        listDiv.innerHTML = tasks.sort((a,b)=>new Date(a.time)-new Date(b.time)).map(t => `
+            <div class="item">
+                <div class="item-info">
+                    <b>${t.name}</b>
+                    <span>⏰ ${t.time.replace('T', ' ')}</span>
+                </div>
+                <button class="btn-del" onclick="deleteTask(${t.id})">刪除</button>
+            </div>
+        `).join('');
+    }
+
+    function deleteTask(id) {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks.filter(t=>t.id!==id)));
+        render();
+    }
+
+    function checkReminders() {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        const now = new Date();
+        let updated = false;
+
+        tasks.forEach(t => {
+            const alarmTime = new Date(t.time);
+            if (alarmTime <= now && !t.done) {
+                // 導引標記：提醒通知也加入「火星」主題
+                if (Notification.permission === "granted") new Notification("⏰ 火星提醒：時間到！", { body: t.name });
+                const utter = new SpeechSynthesisUtterance("火星提醒，時間到囉，記得去做 " + t.name);
+                utter.lang = 'zh-TW';
+                window.speechSynthesis.speak(utter);
+                t.done = true;
+                updated = true;
+            }
+        });
+        if (updated) {
+            localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+            render();
+        }
+    }
+
+    function startVoice() {
+        const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        rec.lang = 'zh-TW';
+        rec.onresult = (e) => document.getElementById('tName').value = e.results[0][0].transcript;
+        rec.start();
+    }
+</script>
+</body>
+</html>
