@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>貼心提醒管家</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
+        .container { max-width: 700px; margin: auto; }
+        h1 { font-size: 3rem; color: #075e54; margin-bottom: 20px; }
+        
+        .box { background: white; padding: 30px; border-radius: 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: left; }
+        label { font-size: 1.5rem; font-weight: bold; color: #333; display: block; margin-top: 15px; }
+        
+        input { width: 100%; padding: 18px; font-size: 1.8rem; margin: 10px 0; border-radius: 15px; border: 3px solid #ddd; box-sizing: border-box; }
+        
+        .btn-group { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+        button { width: 100%; padding: 20px; font-size: 2rem; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-add { background: #128c7e; color: white; }
+        .btn-voice { background: #34b7f1; color: white; }
+        
+        .item { background: white; padding: 20px; margin-top: 15px; border-radius: 20px; display: flex; justify-content: space-between; align-items: center; border-left: 20px solid #128c7e; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .item-info { text-align: left; }
+        .item-info b { font-size: 2.2rem; color: #111; }
+        .item-info p { font-size: 1.4rem; color: #555; margin: 8px 0; }
+        .btn-del { background: #ffebee; color: #d32f2f; width: auto; padding: 10px 20px; font-size: 1.3rem; border: 1px solid #d32f2f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📅 提醒小幫手</h1>
+    <div class="box">
+        <label>1. 要做什麼事？</label>
+        <input type="text" id="tName" placeholder="例如：吃血壓藥">
+        
+        <label>2. 開始日期：</label>
+        <input type="date" id="tStartDate">
+        
+        <label>3. 結束日期：</label>
+        <input type="date" id="tEndDate">
+        
+        <label>4. 每天幾點提醒？</label>
+        <input type="time" id="tAlarmTime">
+        
+        <div class="btn-group">
+            <button class="btn-add" onclick="saveTask()">💾 幫我記住</button>
+            <button class="btn-voice" onclick="startVoice()">🎤 用說的也可以</button>
+        </div>
+    </div>
+    <div id="list"></div>
+</div>
+
+<script>
+    // 初始化權限與顯示
+    window.onload = () => {
+        if ("Notification" in window) Notification.requestPermission();
+        showTasks();
+        // 設定預設日期為今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('tStartDate').value = today;
+        document.getElementById('tEndDate').value = today;
+    };
+
+    // 儲存邏輯
+    function saveTask() {
+        const name = document.getElementById('tName').value;
+        const start = document.getElementById('tStartDate').value;
+        const end = document.getElementById('tEndDate').value;
+        const alarm = document.getElementById('tAlarmTime').value;
+
+        if (!name || !start || !end || !alarm) {
+            alert("要把內容、日期和時間都填好喔！");
+            return;
+        }
+
+        if (new Date(start) > new Date(end)) {
+            alert("結束日期不能比開始日期早喔！");
+            return;
+        }
+
+        const tasks = JSON.parse(localStorage.getItem('smart_reminders') || '[]');
+        tasks.push({ id: Date.now(), name, start, end, alarm, notifiedDays: [] });
+        localStorage.setItem('smart_reminders', JSON.stringify(tasks));
+        
+        document.getElementById('tName').value = "";
+        showTasks();
+        alert("已經記好囉！");
+    }
+
+    // 顯示清單
+    function showTasks() {
+        const listDiv = document.getElementById('list');
+        const tasks = JSON.parse(localStorage.getItem('smart_reminders') || '[]');
+        listDiv.innerHTML = tasks.map(t => `
+            <div class="item">
+                <div class="item-info">
+                    <b>${t.name}</b>
+                    <p>📅 ${t.start} 至 ${t.end}</p>
+                    <p>⏰ 每天 ${t.alarm} 提醒</p>
+                </div>
+                <button class="btn-del" onclick="deleteTask(${t.id})">刪除</button>
+            </div>
+        `).reverse().join('');
+    }
+
+    function deleteTask(id) {
+        let tasks = JSON.parse(localStorage.getItem('smart_reminders') || '[]');
+        tasks = tasks.filter(t => t.id !== id);
+        localStorage.setItem('smart_reminders', JSON.stringify(tasks));
+        showTasks();
+    }
+
+    // 自動檢查與提醒邏輯
+    setInterval(() => {
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentTime = now.getHours().toString().padStart(2, '0') + ":" + 
+                          now.getMinutes().toString().padStart(2, '0');
+        
+        let tasks = JSON.parse(localStorage.getItem('smart_reminders') || '[]');
+        let updated = false;
+
+        tasks.forEach(t => {
+            // 判斷是否在起訖日內，且時間吻合，且今天尚未提醒過
+            if (today >= t.start && today <= t.end && currentTime === t.alarm && !t.notifiedDays.includes(today)) {
+                triggerReminder(t.name);
+                t.notifiedDays.push(today); // 標記今天已提醒
+                updated = true;
+            }
+        });
+
+        if (updated) localStorage.setItem('smart_reminders', JSON.stringify(tasks));
+    }, 30000); // 每 30 秒檢查一次
+
+    function triggerReminder(name) {
+        if (Notification.permission === "granted") {
+            new Notification("⏰ 提醒時間到！", { body: name });
+        }
+        // 語音播放
+        const msg = new SpeechSynthesisUtterance("時間到囉，記得去做 " + name);
+        msg.lang = 'zh-TW';
+        window.speechSynthesis.speak(msg);
+        // 震動
+        if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+    }
+
+    function startVoice() {
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'zh-TW';
+        recognition.onresult = (e) => document.getElementById('tName').value = e.results[0][0].transcript;
+        recognition.start();
+    }
+</script>
+</body>
+</html>
