@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>火星行程管家</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI2ZmNTcyMiIgc3Ryb2tlPSIjYmYzNjBjIiBzdHJva2Utd2lkdGg9IjIiLz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI0MCIgcng9IjEwIiByeT0iNyIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PGVsbGlwc2UgY3g9IjcwIiBjeT0iNjAiIHJ4PSI4IiByeT0iNSIgZmlsbD0iI2JmMzYwYyIgb3BhY2l0eT0iMC43Ii8+PHBhdGggZD0iTSAxNSA2NSBRIDQwIDgwIDg1IDU1IiBzdHJva2U9IiNiZjM2MGMiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgb3BhY2l0eT0iMC44Ii8+PC9zdmc+">
+    <style>
+        :root { --mars-red: #bf360c; --mars-orange: #ff5722; --active-green: #2e7d32; }
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: #fdfdfd; padding: 20px; line-height: 1.6; color: #333; text-align: left; }
+        .container { max-width: 600px; margin: 0 auto; }
+        h1 { font-size: 2.8rem; color: var(--mars-red); display: flex; align-items: center; gap: 10px; }
+        .card { background: white; padding: 25px; border-radius: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #eee; margin-bottom: 25px; }
+        label { font-size: 1.5rem; font-weight: bold; color: var(--mars-red); display: block; margin-bottom: 8px; }
+        input[type="text"], input[type="datetime-local"] { width: 100%; padding: 18px; font-size: 1.8rem; margin-bottom: 20px; border-radius: 15px; border: 3px solid #ccc; box-sizing: border-box; }
+        
+        /* 導引標記：鬧鐘開關樣式 */
+        .switch-area { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; background: #fff3e0; padding: 15px; border-radius: 15px; }
+        .switch-label { font-size: 1.4rem; font-weight: bold; }
+        input[type="checkbox"] { width: 30px; height: 30px; cursor: pointer; }
+
+        .btn { width: 100%; padding: 20px; font-size: 2rem; border-radius: 20px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 15px; }
+        .btn-save { background: var(--mars-red); color: white; }
+        .btn-voice { background: #03a9f4; color: white; }
+        .btn-voice.recording { background: #f44336; animation: pulse 1.2s infinite; }
+
+        /* 提醒中的覆蓋層面 */
+        #alarmOverlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(191, 54, 12, 0.95); z-index: 1000; color: white; text-align: center; padding-top: 20%; }
+        #alarmOverlay h2 { font-size: 4rem; }
+        .btn-stop { background: white; color: var(--mars-red); width: 80%; max-width: 300px; padding: 30px; font-size: 2.5rem; border-radius: 50px; margin-top: 30px; }
+
+        .item { background: white; padding: 20px; margin-top: 15px; border-radius: 20px; border-left: 15px solid var(--mars-red); box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .item-info b { font-size: 2.2rem; display: block; }
+        .item-info span { font-size: 1.3rem; color: #666; }
+        .alarm-status { font-size: 1.1rem; color: var(--active-green); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="alarmOverlay">
+    <h2 id="alarmText">時間到囉！</h2>
+    <button class="btn-stop" onclick="stopAlarm()">🔕 我知道了 (關閉鈴聲)</button>
+</div>
+
+<div class="container">
+    <h1>🚀 火星行程管家</h1>
+    
+    <div class="card">
+        <label>第一步：行程</label>
+        <input type="text" id="tName" placeholder="點這裡輸入內容">
+        
+        <label>第二步：時間</label>
+        <input type="datetime-local" id="tTime">
+        
+        <div class="switch-area">
+            <input type="checkbox" id="tAlarmActive" checked>
+            <span class="switch-label">🔊 時間到要響鈴提醒我</span>
+        </div>
+
+        <button class="btn btn-voice" id="voiceBtn" onclick="startVoice()">🎤 用說的也可以</button>
+        <button class="btn btn-save" id="saveBtn" onclick="saveTask()">💾 記下來</button>
+    </div>
+
+    <div id="taskList"></div>
+</div>
+
+<audio id="alarmSound" loop>
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+</audio>
+
+<script>
+    let editingId = null;
+    const alarmSound = document.getElementById('alarmSound');
+
+    window.onload = () => {
+        if ("Notification" in window) Notification.requestPermission();
+        setDefaultTime();
+        render();
+        // 為了繞過瀏覽器限制，用戶第一次點擊頁面時，啟動音頻上下文
+        document.body.addEventListener('click', () => { alarmSound.load(); }, { once: true });
+        setInterval(checkReminders, 10000);
+    };
+
+    function setDefaultTime() {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('tTime').value = now.toISOString().slice(0, 16);
+    }
+
+    function saveTask() {
+        const name = document.getElementById('tName').value;
+        const time = document.getElementById('tTime').value;
+        const useAlarm = document.getElementById('tAlarmActive').checked;
+
+        if (!name) { alert("請填寫內容喔！"); return; }
+        
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        if (editingId) {
+            tasks = tasks.map(t => t.id === editingId ? { ...t, name, time, useAlarm, done: false } : t);
+            editingId = null;
+        } else {
+            tasks.push({ id: Date.now(), name, time, useAlarm, done: false });
+        }
+
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+        document.getElementById('tName').value = "";
+        document.getElementById('saveBtn').innerText = "💾 記下來";
+        render();
+        alert("記好了！");
+    }
+
+    function render() {
+        const listDiv = document.getElementById('taskList');
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        listDiv.innerHTML = tasks.sort((a,b)=>new Date(a.time)-new Date(b.time)).map(t => `
+            <div class="item">
+                <div class="item-info">
+                    <b>${t.name}</b>
+                    <span>⏰ ${t.time.replace('T', ' ')}</span>
+                    <span class="alarm-status">${t.useAlarm ? '🔔 已開啟響鈴' : '🔕 僅文字提醒'}</span>
+                </div>
+                <div style="margin-top:15px; display:flex; gap:10px;">
+                    <button style="padding:10px; border-radius:10px; border:1px solid #ccc; cursor:pointer;" onclick="editTask(${t.id})">✏️ 修改</button>
+                    <button style="padding:10px; border-radius:10px; border:1px solid #ccc; cursor:pointer; color:red;" onclick="deleteTask(${t.id})">❌ 刪除</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function checkReminders() {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        const now = new Date();
+        let updated = false;
+
+        tasks.forEach(t => {
+            if (new Date(t.time) <= now && !t.done) {
+                triggerReminder(t);
+                t.done = true;
+                updated = true;
+            }
+        });
+        if (updated) {
+            localStorage.setItem('mars_tasks', JSON.stringify(tasks));
+            render();
+        }
+    }
+
+    function triggerReminder(task) {
+        // 1. 顯示全螢幕通知 (長輩最容易看到)
+        document.getElementById('alarmOverlay').style.display = 'block';
+        document.getElementById('alarmText').innerText = "火星提醒：\n" + task.name;
+
+        // 2. 判斷是否要響鈴
+        if (task.useAlarm) {
+            alarmSound.play().catch(e => console.log("播放失敗，需要用戶先點擊過頁面", e));
+        }
+
+        // 3. 語音唸出來
+        const utter = new SpeechSynthesisUtterance("時間到囉，記得去做 " + task.name);
+        utter.lang = 'zh-TW';
+        window.speechSynthesis.speak(utter);
+
+        // 4. 系統通知
+        if (Notification.permission === "granted") new Notification("⏰ 時間到！", { body: task.name });
+    }
+
+    function stopAlarm() {
+        alarmSound.pause();
+        alarmSound.currentTime = 0;
+        document.getElementById('alarmOverlay').style.display = 'none';
+    }
+
+    function editTask(id) {
+        const tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        const task = tasks.find(t => t.id === id);
+        if (task) {
+            document.getElementById('tName').value = task.name;
+            document.getElementById('tTime').value = task.time;
+            document.getElementById('tAlarmActive').checked = task.useAlarm;
+            editingId = id;
+            document.getElementById('saveBtn').innerText = "🆙 更新行程";
+            window.scrollTo(0,0);
+        }
+    }
+
+    function deleteTask(id) {
+        let tasks = JSON.parse(localStorage.getItem('mars_tasks') || '[]');
+        localStorage.setItem('mars_tasks', JSON.stringify(tasks.filter(t=>t.id!==id)));
+        render();
+    }
+
+    function startVoice() {
+        const btn = document.getElementById('voiceBtn');
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'zh-TW';
+        recognition.onstart = () => btn.classList.add('recording');
+        recognition.onresult = (e) => document.getElementById('tName').value = e.results[0][0].transcript;
+        recognition.onend = () => btn.classList.remove('recording');
+        recognition.start();
+    }
+</script>
+</body>
+</html>
