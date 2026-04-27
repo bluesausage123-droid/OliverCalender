@@ -1,4 +1,4 @@
-const CACHE  = 'mars-v5';
+const CACHE  = 'mars-v6';
 const ASSETS = ['./', './index.html', './manifest.json', './sw.js', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
