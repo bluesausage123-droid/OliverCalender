@@ -292,23 +292,36 @@ function triggerAlarm(task) {
     if (!alarmActive) showNextAlarm();
 }
 
-async function showNextAlarm() {
+function showNextAlarm() {
     if (!alarmQueue.length) { alarmActive = false; return; }
     alarmActive = true;
     const task = alarmQueue.shift();
+
+    // 1) 立刻顯示彈窗（最重要，不能被任何錯誤擋住）
     document.getElementById('alarmContent').innerText = task.name;
     document.getElementById('alarmOverlay').style.display = 'block';
     document.getElementById('snoozeBtn').onclick = () => snooze(task.id);
-    // 申請螢幕常亮（響鈴時自動亮螢幕）
+
+    // 2) 語音播報（同步觸發）
+    try {
+        const utter = new SpeechSynthesisUtterance('時間到囉，記得去做 ' + task.name);
+        utter.lang = 'zh-TW';
+        window.speechSynthesis.speak(utter);
+    } catch(e) {}
+
+    // 3) 響鈴（背景執行，失敗不影響其他）
+    if (task.useAlarm) playAlarm().catch(() => {});
+
+    // 4) 申請螢幕常亮（背景執行，失敗不影響其他）
+    requestWakeLock();
+}
+
+async function requestWakeLock() {
     try {
         if ('wakeLock' in navigator) {
             wakeLock = await navigator.wakeLock.request('screen');
         }
     } catch(e) {}
-    if (task.useAlarm) playAlarm();
-    const utter = new SpeechSynthesisUtterance('時間到囉，記得去做 ' + task.name);
-    utter.lang = 'zh-TW';
-    window.speechSynthesis.speak(utter);
 }
 
 function stopAlarm() {
