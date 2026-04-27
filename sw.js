@@ -1,4 +1,4 @@
-const CACHE  = 'mars-v6';
+const CACHE  = 'mars-v7';
 const ASSETS = ['./', './index.html', './manifest.json', './sw.js', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -140,27 +140,33 @@ self.addEventListener('message', e => {
 
 // ── 接收 Server 推送（App 關閉時也能收到）────────────────
 self.addEventListener('push', e => {
-    if (!e.data) return;
-    const data = e.data.json();
-    e.waitUntil((async () => {
-        // 1) 顯示系統通知（會響鈴）
-        await self.registration.showNotification(data.title || '火星管家提醒 🔔', {
-            body:               data.body || '時間到！',
-            icon:               './icon-192.png',
-            badge:              './icon-192.png',
-            vibrate:            [400, 100, 400, 100, 400],
-            tag:                'alarm-' + (data.id || Date.now()),
-            requireInteraction: true,
-            data:               { id: data.id, uid: data.uid, name: data.name },
-            actions: [
-                { action: 'snooze',  title: '⏰ 延後10分鐘' },
-                { action: 'dismiss', title: '✅ 知道了' }
-            ]
-        });
-        // 2) 若 App 已開著（背景或前景），直接觸發全螢幕彈窗
-        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        clients.forEach(c => c.postMessage({ type: 'ALARM_FIRED', id: data.id, name: data.name }));
-    })());
+    let data = {};
+    try { data = e.data ? e.data.json() : {}; } catch {}
+
+    // ① 顯示系統通知（最優先，必須先成功）
+    const notifyPromise = self.registration.showNotification(data.title || '火星管家提醒 🔔', {
+        body:               data.body || '時間到！',
+        icon:               './icon-192.png',
+        badge:              './icon-192.png',
+        vibrate:            [400, 100, 400, 100, 400, 100, 400],
+        tag:                'alarm-' + Date.now(),       // 每次都用新 tag，避免被合併
+        renotify:           true,
+        requireInteraction: true,
+        silent:             false,
+        data:               { id: data.id, uid: data.uid, name: data.name },
+        actions: [
+            { action: 'snooze',  title: '⏰ 延後10分鐘' },
+            { action: 'dismiss', title: '✅ 知道了' }
+        ]
+    }).catch(err => console.error('showNotification 失敗:', err));
+
+    // ② 順便通知前景/背景 App 顯示彈窗（失敗也不影響①）
+    const messagePromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+        .then(clients => clients.forEach(c =>
+            c.postMessage({ type: 'ALARM_FIRED', id: data.id, name: data.name })))
+        .catch(() => {});
+
+    e.waitUntil(Promise.all([notifyPromise, messagePromise]));
 });
 
 // ── 通知按鈕動作 ──────────────────────────────────────────
