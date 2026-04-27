@@ -1,0 +1,13 @@
+{
+  "name": "mars-reminder",
+  "version": "1.0.0",
+  "description": "火星行程管家伺服器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "web-push": "^3.6.7"
+  }
+}
