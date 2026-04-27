@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>火星行程管家</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root { --red: #bf360c; --orange: #ff5722; --blue: #0277bd; --green: #2e7d32; }
+* { box-sizing: border-box; }
+body { font-family: "PingFang TC","Microsoft JhengHei",sans-serif; background:#fdfdfd; margin:0; padding:20px; color:#333; text-align:center; }
+.container { max-width:600px; margin:0 auto; display:flex; flex-direction:column; align-items:center; }
+h1 { font-size:2.8rem; color:var(--red); display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:25px; }
+.header-icon { width:60px; height:60px; }
+.card { background:white; padding:25px; border-radius:30px; box-shadow:0 10px 25px rgba(0,0,0,.1); border:1px solid #eee; margin-bottom:25px; width:100%; text-align:left; }
+label { font-size:1.5rem; font-weight:bold; color:var(--red); display:block; margin-bottom:8px; }
+input[type=text], input[type=datetime-local] { width:100%; padding:18px; font-size:1.8rem; margin-bottom:20px; border-radius:15px; border:3px solid #ccc; background:#fafafa; }
+.toggle-row { display:flex; align-items:center; gap:15px; margin-bottom:25px; background:#fff3e0; padding:15px; border-radius:15px; border:2px solid #ffcc80; }
+.toggle-row input[type=checkbox] { width:35px; height:35px; margin:0; cursor:pointer; flex-shrink:0; }
+.toggle-label { font-size:1.4rem; font-weight:bold; color:#5d4037; }
+.btn { width:100%; padding:22px; font-size:2.2rem; border-radius:20px; border:none; font-weight:bold; cursor:pointer; margin-bottom:15px; }
+.btn-save  { background:var(--red); color:white; box-shadow:0 5px 15px rgba(191,54,12,.3); }
+.btn-voice { background:#03a9f4; color:white; }
+.btn-voice.recording { background:#f44336; animation:pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.btn-cancel { width:100%; background:none; border:none; color:#999; text-decoration:underline; cursor:pointer; font-size:1.3rem; padding:6px; }
+
+/* Alarm overlay */
+#alarmOverlay { display:none; position:fixed; inset:0; background:rgba(191,54,12,.98); z-index:9999; color:white; text-align:center; padding:12% 20px; }
+#alarmOverlay h2 { font-size:2rem; margin:12px 0; }
+#alarmContent { font-size:3rem; font-weight:bold; margin:30px 0; line-height:1.3; }
+.btn-alarm { width:100%; max-width:420px; padding:30px; font-size:2.2rem; border-radius:50px; border:none; font-weight:bold; margin-bottom:18px; cursor:pointer; display:block; margin-left:auto; margin-right:auto; }
+.btn-stop   { background:white; color:var(--red); }
+.btn-snooze { background:var(--blue); color:white; border:3px solid white; }
+
+/* Task items */
+.item { background:white; padding:20px; margin-top:15px; border-radius:20px; border-left:15px solid var(--red); box-shadow:0 5px 15px rgba(0,0,0,.05); text-align:left; width:100%; }
+.item.notified { border-left-color:#ccc; opacity:.6; background:#f9f9f9; }
+.item-name { font-size:2rem; font-weight:bold; display:block; color:#000; word-break:break-all; }
+.item-time { font-size:1.3rem; color:#666; display:block; margin-top:6px; white-space:nowrap; }
+.item-tag  { display:inline-block; padding:5px 14px; border-radius:8px; font-size:1.2rem; font-weight:bold; margin-top:10px; white-space:nowrap; }
+.tag-waiting { background:#fff3e0; color:#ef6c00; }
+.tag-done    { background:#eee; color:#888; }
+.item-btns { display:flex; gap:10px; margin-top:14px; }
+.item-btns button { flex:1; padding:14px; border-radius:12px; border:1px solid #ccc; font-size:1.3rem; cursor:pointer; background:white; white-space:nowrap; }
+.item-btns .del { color:red; }
+</style>
+</head>
+<body>
+
+<!-- Alarm Overlay -->
+<div id="alarmOverlay">
+  <svg style="width:90px;height:90px" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="48" fill="#ff5722" stroke="#bf360c" stroke-width="2"/>
+    <ellipse cx="30" cy="40" rx="10" ry="7" fill="#bf360c" opacity=".7"/>
+    <ellipse cx="70" cy="60" rx="8" ry="5" fill="#bf360c" opacity=".7"/>
+    <path d="M 15 65 Q 40 80 85 55" stroke="#bf360c" stroke-width="3" fill="none" opacity=".8"/>
+  </svg>
+  <h2>火星管家提醒時間到！</h2>
+  <div id="alarmContent"></div>
+  <button class="btn-alarm btn-stop"   onclick="stopAlarm()">🔕 我知道了（關閉提醒）</button>
+  <button class="btn-alarm btn-snooze" id="snoozeBtn">⏰ 延後 10 分鐘再叫我</button>
+</div>
+
+<!-- Main UI -->
+<div class="container">
+  <h1>
+    <svg class="header-icon" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="48" fill="#ff5722" stroke="#bf360c" stroke-width="2"/>
+      <ellipse cx="30" cy="40" rx="10" ry="7" fill="#bf360c" opacity=".7"/>
+      <ellipse cx="70" cy="60" rx="8" ry="5" fill="#bf360c" opacity=".7"/>
+      <path d="M 15 65 Q 40 80 85 55" stroke="#bf360c" stroke-width="3" fill="none" opacity=".8"/>
+    </svg>
+    <span>火星行程管家</span>
+  </h1>
+
+  <div class="card">
+    <label>1. 要做什麼事？</label>
+    <input type="text" id="tName" placeholder="例如：看醫生、吃藥">
+    <label>2. 什麼時候提醒？</label>
+    <input type="datetime-local" id="tTime">
+    <div class="toggle-row">
+      <input type="checkbox" id="tAlarmActive" checked>
+      <span class="toggle-label">🔊 時間到要響鈴提醒我</span>
+    </div>
+    <button class="btn btn-voice" id="voiceBtn" onclick="startVoice()">🎤 用說的也可以</button>
+    <button class="btn btn-save"  id="saveBtn"  onclick="saveTask()">💾 記下來</button>
+    <button class="btn-cancel" id="cancelBtn" style="display:none" onclick="cancelEdit()">取消修改</button>
+  </div>
+
+  <div id="taskList" style="width:100%"></div>
+</div>
+
+<script>
+const KEY = 'mars_v7_tasks';
+let editingId   = null;
+let alarmQueue  = [];
+let alarmActive = false;
+let actx        = null;
+let alarmTimer  = null;
+
+// ── Audio (Web Audio API — no external file needed) ───────
+function initAudio() {
+    if (actx) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    // Silent buffer loop — signals to the OS that media is active,
+    // reducing the chance of the tab being throttled when minimised
+    const buf  = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+    const src  = actx.createBufferSource();
+    const gain = actx.createGain();
+    gain.gain.value = 0.0001;
+    src.buffer = buf;
+    src.loop   = true;
+    src.connect(gain);
+    gain.connect(actx.destination);
+    src.start();
+}
+
+function beep(freq, startOffset, duration) {
+    const osc  = actx.createOscillator();
+    const gain = actx.createGain();
+    const t    = actx.currentTime + startOffset;
+    osc.type            = 'square';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.5, t + 0.03);
+    gain.gain.setValueAtTime(0.5, t + duration - 0.03);
+    gain.gain.linearRampToValueAtTime(0, t + duration);
+    osc.connect(gain);
+    gain.connect(actx.destination);
+    osc.start(t);
+    osc.stop(t + duration);
+}
+
+function playAlarm() {
+    if (!actx || !alarmActive) return;
+    beep(880,  0,    0.18);
+    beep(1046, 0.25, 0.18);
+    beep(880,  0.5,  0.18);
+    beep(1046, 0.75, 0.18);
+    beep(880,  1.0,  0.18);
+    alarmTimer = setTimeout(playAlarm, 1700);
+}
+
+function stopAlarmSound() {
+    clearTimeout(alarmTimer);
+    alarmTimer = null;
+}
+
+// ── Storage ───────────────────────────────────────────────
+function getTasks() { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+function setTasks(t) { localStorage.setItem(KEY, JSON.stringify(t)); }
+
+// ── Helpers ───────────────────────────────────────────────
+const pad = n => String(n).padStart(2, '0');
+function localTimeStr(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setDefaultTime() { document.getElementById('tTime').value = localTimeStr(new Date()); }
+
+// ── Init ──────────────────────────────────────────────────
+window.onload = () => {
+    setDefaultTime();
+    render();
+    document.body.addEventListener('click', initAudio, { once: true });
+    setInterval(checkReminders, 10000);
+    registerSW();
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) requestSWSync();
+    });
+};
+
+// ── Service Worker ────────────────────────────────────────
+async function registerSW() {
+    if (!('serviceWorker' in navigator)) return;
+    try {
+        await navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.addEventListener('message', handleSWMessage);
+        await navigator.serviceWorker.ready;
+        await Notification.requestPermission();
+        syncTasksToSW();
+    } catch(e) {}
+}
+
+function syncTasksToSW() {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'SYNC_TASKS', tasks: getTasks() });
+}
+function requestSWSync() {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'GET_TASKS' });
+}
+
+function handleSWMessage(e) {
+    if (!e.data) return;
+    const { type, id, tasks } = e.data;
+    if (type === 'ALARM_FIRED') {
+        const task = getTasks().find(t => t.id === id);
+        if (task && !task.notified) {
+            setTasks(getTasks().map(t => t.id === id ? { ...t, notified: true } : t));
+            triggerAlarm(task);
+            render();
+        }
+    }
+    if (type === 'ALARM_NOTIFIED') {
+        setTasks(getTasks().map(t => t.id === id ? { ...t, notified: true } : t));
+        render();
+    }
+    if (type === 'SNOOZED') { requestSWSync(); }
+    if (type === 'TASKS_DATA' && tasks) {
+        const map = new Map(tasks.map(t => [t.id, t]));
+        setTasks(getTasks().map(t => { const s = map.get(t.id); return s ? { ...t, time: s.time, notified: s.notified } : t; }));
+        syncTasksToSW();
+        render();
+    }
+}
+
+// ── Save / Edit ───────────────────────────────────────────
+function saveTask() {
+    const name     = document.getElementById('tName').value.trim();
+    const time     = document.getElementById('tTime').value;
+    const useAlarm = document.getElementById('tAlarmActive').checked;
+    if (!name) { alert('請填寫要做的事情'); return; }
+    if (!time) { alert('請選擇提醒時間');   return; }
+    let tasks = getTasks();
+    if (editingId) {
+        tasks = tasks.map(t => t.id === editingId ? { ...t, name, time, useAlarm, notified: false } : t);
+        editingId = null;
+        document.getElementById('saveBtn').innerText       = '💾 記下來';
+        document.getElementById('cancelBtn').style.display = 'none';
+    } else {
+        tasks.push({ id: Date.now(), name, time, useAlarm, notified: false });
+    }
+    setTasks(tasks);
+    syncTasksToSW();
+    document.getElementById('tName').value = '';
+    setDefaultTime();
+    render();
+    alert('記好了！');
+}
+
+function editTask(id) {
+    const task = getTasks().find(t => t.id === id);
+    if (!task) return;
+    document.getElementById('tName').value            = task.name;
+    document.getElementById('tTime').value            = task.time;
+    document.getElementById('tAlarmActive').checked   = task.useAlarm ?? true;
+    editingId = id;
+    document.getElementById('saveBtn').innerText       = '🆙 更新行程';
+    document.getElementById('cancelBtn').style.display = 'block';
+    window.scrollTo(0, 0);
+}
+
+function cancelEdit() {
+    editingId = null;
+    document.getElementById('tName').value             = '';
+    setDefaultTime();
+    document.getElementById('saveBtn').innerText       = '💾 記下來';
+    document.getElementById('cancelBtn').style.display = 'none';
+}
+
+function deleteTask(id) {
+    if (editingId === id) cancelEdit();
+    setTasks(getTasks().filter(t => t.id !== id));
+    syncTasksToSW();
+    render();
+}
+
+// ── Alarm ─────────────────────────────────────────────────
+function checkReminders() {
+    const now   = new Date();
+    let tasks   = getTasks();
+    let changed = false;
+    tasks.forEach(t => {
+        if (!t.notified && new Date(t.time) <= now) {
+            triggerAlarm(t);
+            t.notified = true;
+            changed    = true;
+        }
+    });
+    if (changed) { setTasks(tasks); syncTasksToSW(); render(); }
+}
+
+function triggerAlarm(task) {
+    alarmQueue.push(task);
+    if (!alarmActive) showNextAlarm();
+}
+
+function showNextAlarm() {
+    if (!alarmQueue.length) { alarmActive = false; return; }
+    alarmActive = true;
+    const task = alarmQueue.shift();
+    document.getElementById('alarmContent').innerText = task.name;
+    document.getElementById('alarmOverlay').style.display = 'block';
+    document.getElementById('snoozeBtn').onclick = () => snooze(task.id);
+    if (task.useAlarm) {
+        initAudio();
+        playAlarm();
+    }
+    const utter = new SpeechSynthesisUtterance('時間到囉，記得去做 ' + task.name);
+    utter.lang = 'zh-TW';
+    window.speechSynthesis.speak(utter);
+}
+
+function stopAlarm() {
+    stopAlarmSound();
+    window.speechSynthesis.cancel();
+    document.getElementById('alarmOverlay').style.display = 'none';
+    alarmActive = false;
+    showNextAlarm();
+}
+
+function snooze(id) {
+    const tasks = getTasks().map(t =>
+        t.id === id ? { ...t, time: localTimeStr(new Date(Date.now() + 10 * 60000)), notified: false } : t
+    );
+    setTasks(tasks);
+    syncTasksToSW();
+    stopAlarm();
+    render();
+    alert('已延後 10 分鐘提醒！');
+}
+
+// ── Render ────────────────────────────────────────────────
+function render() {
+    document.getElementById('taskList').innerHTML = getTasks()
+        .sort((a, b) => new Date(a.time) - new Date(b.time))
+        .map(t => `
+<div class="item ${t.notified ? 'notified' : ''}">
+  <span class="item-name">${escHtml(t.name)}</span>
+  <span class="item-time">⏰ ${escHtml(t.time.replace('T', ' '))}</span>
+  <span class="item-tag ${t.notified ? 'tag-done' : 'tag-waiting'}">${t.notified ? '✅ 已提醒過您了' : '⏳ 等待提醒中'}</span>
+  <div class="item-btns">
+    <button onclick="editTask(${t.id})">✏️ 修改</button>
+    <button class="del" onclick="deleteTask(${t.id})">❌ 刪除</button>
+  </div>
+</div>`).join('');
+}
+
+// ── Voice input ───────────────────────────────────────────
+function startVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('您的瀏覽器不支援語音輸入，請直接打字'); return; }
+    const btn = document.getElementById('voiceBtn');
+    try {
+        const rec = new SR();
+        rec.lang     = 'zh-TW';
+        rec.onstart  = ()  => { btn.classList.add('recording'); btn.innerText = '正在聽...'; };
+        rec.onresult = e   => { document.getElementById('tName').value = e.results[0][0].transcript; };
+        rec.onerror  = ()  => { btn.classList.remove('recording'); btn.innerText = '🎤 用說的也可以'; alert('語音辨識失敗，請重試'); };
+        rec.onend    = ()  => { btn.classList.remove('recording'); btn.innerText = '🎤 用說的也可以'; };
+        rec.start();
+    } catch(err) { alert('語音功能無法啟動：' + err.message); }
+}
+</script>
+</body>
+</html>
