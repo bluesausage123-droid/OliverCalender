@@ -105,6 +105,7 @@ async function checkAndPush() {
                 await webpush.sendNotification(user.sub, JSON.stringify({
                     title: '火星管家提醒 🔔',
                     body:  '時間到！記得去做：' + task.name,
+                    name:  task.name,
                     id:    task.id,
                     uid:   uid
                 }));

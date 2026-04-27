@@ -138,6 +138,31 @@ self.addEventListener('message', e => {
     }
 });
 
+// ── 接收 Server 推送（App 關閉時也能收到）────────────────
+self.addEventListener('push', e => {
+    if (!e.data) return;
+    const data = e.data.json();
+    e.waitUntil((async () => {
+        // 1) 顯示系統通知（會響鈴）
+        await self.registration.showNotification(data.title || '火星管家提醒 🔔', {
+            body:               data.body || '時間到！',
+            icon:               './icon-192.png',
+            badge:              './icon-192.png',
+            vibrate:            [400, 100, 400, 100, 400],
+            tag:                'alarm-' + (data.id || Date.now()),
+            requireInteraction: true,
+            data:               { id: data.id, uid: data.uid, name: data.name },
+            actions: [
+                { action: 'snooze',  title: '⏰ 延後10分鐘' },
+                { action: 'dismiss', title: '✅ 知道了' }
+            ]
+        });
+        // 2) 若 App 已開著（背景或前景），直接觸發全螢幕彈窗
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        clients.forEach(c => c.postMessage({ type: 'ALARM_FIRED', id: data.id, name: data.name }));
+    })());
+});
+
 // ── 通知按鈕動作 ──────────────────────────────────────────
 self.addEventListener('notificationclick', e => {
     e.notification.close();
@@ -145,19 +170,32 @@ self.addEventListener('notificationclick', e => {
 
     if (e.action === 'snooze' && id) {
         e.waitUntil((async () => {
-            await dbUpdateTask(id, {
-                time:     localTimeStr(new Date(Date.now() + 10 * 60000)),
-                notified: false
-            });
+            const uid = e.notification.data?.uid;
+            // 優先通知 Server（確保下次推送是延後後的時間）
+            try {
+                await fetch(`/api/tasks/${id}/snooze?uid=${uid}`, { method: 'POST' });
+            } catch {
+                // 離線時 fallback 到 IndexedDB
+                await dbUpdateTask(id, {
+                    time:     localTimeStr(new Date(Date.now() + 10 * 60000)),
+                    notified: false
+                });
+            }
             const clients = await self.clients.matchAll({ type: 'window' });
             clients.forEach(c => c.postMessage({ type: 'SNOOZED', id }));
             if (clients.length) clients[0].focus();
             else self.clients.openWindow('./');
         })());
     } else {
-        e.waitUntil(
-            self.clients.matchAll({ type: 'window' })
-                .then(clients => clients.length ? clients[0].focus() : self.clients.openWindow('./'))
-        );
+        // 點通知本體 → 開啟 App 並立即顯示全螢幕彈窗
+        e.waitUntil((async () => {
+            const clients = await self.clients.matchAll({ type: 'window' });
+            if (clients.length) {
+                await clients[0].focus();
+                clients[0].postMessage({ type: 'ALARM_FIRED', id, name: e.notification.data?.name });
+            } else {
+                await self.clients.openWindow('./?alarm=' + id);
+            }
+        })());
     }
 });

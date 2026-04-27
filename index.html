@@ -152,9 +152,37 @@ function stopAlarmSound() {
     alarmTimer = null;
 }
 
+// ── 使用者 ID（每台裝置獨立，避免多人互相干擾）─────────────
+function getUid() {
+    let uid = localStorage.getItem('mars_uid');
+    if (!uid) {
+        uid = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        localStorage.setItem('mars_uid', uid);
+    }
+    return uid;
+}
+
 // ── Storage ───────────────────────────────────────────────
 function getTasks() { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
 function setTasks(t) { localStorage.setItem(KEY, JSON.stringify(t)); }
+
+// ── 同步任務到 Server ─────────────────────────────────────
+async function syncToServer(tasks) {
+    try {
+        await fetch(`/api/tasks?uid=${getUid()}`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(tasks)
+        });
+    } catch(e) {}  // 離線時靜默略過
+}
+
+// ── VAPID Base64 轉換工具 ──────────────────────────────────
+function urlBase64ToUint8Array(b64) {
+    const pad  = '='.repeat((4 - b64.length % 4) % 4);
+    const raw  = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
 
 // ── Helpers ───────────────────────────────────────────────
 const pad = n => String(n).padStart(2, '0');
@@ -176,6 +204,12 @@ window.onload = () => {
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) requestSWSync();
     });
+    // 若 URL 帶 ?alarm=ID（從通知點進來的），立刻顯示全螢幕彈窗
+    const alarmId = new URLSearchParams(location.search).get('alarm');
+    if (alarmId) {
+        const task = getTasks().find(t => String(t.id) === alarmId);
+        if (task) triggerAlarm(task);
+    }
 };
 
 // ── Service Worker ────────────────────────────────────────
@@ -184,9 +218,28 @@ async function registerSW() {
     try {
         await navigator.serviceWorker.register('./sw.js');
         navigator.serviceWorker.addEventListener('message', handleSWMessage);
-        await navigator.serviceWorker.ready;
-        await Notification.requestPermission();
+        const sw = await navigator.serviceWorker.ready;
+        const perm = await Notification.requestPermission();
         syncTasksToSW();
+        if (perm === 'granted') await subscribePush(sw);
+    } catch(e) {}
+}
+
+// ── 訂閱 Web Push，將訂閱資料傳給 Server ─────────────────
+async function subscribePush(sw) {
+    if (!('PushManager' in window)) return;
+    try {
+        const res      = await fetch('/api/vapid-key');
+        const { key }  = await res.json();
+        const sub      = await sw.pushManager.subscribe({
+            userVisibleOnly:      true,
+            applicationServerKey: urlBase64ToUint8Array(key)
+        });
+        await fetch('/api/subscribe', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ uid: getUid(), sub })
+        });
     } catch(e) {}
 }
 
@@ -239,6 +292,7 @@ function saveTask() {
     }
     setTasks(tasks);
     syncTasksToSW();
+    syncToServer(tasks);   // 同步到 Server，讓 Server 在 App 關閉時也能推送
     document.getElementById('tName').value = '';
     setDefaultTime();
     render();
@@ -267,8 +321,10 @@ function cancelEdit() {
 
 function deleteTask(id) {
     if (editingId === id) cancelEdit();
-    setTasks(getTasks().filter(t => t.id !== id));
+    const tasks = getTasks().filter(t => t.id !== id);
+    setTasks(tasks);
     syncTasksToSW();
+    syncToServer(tasks);
     render();
 }
 
